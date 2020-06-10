@@ -137,7 +137,7 @@ export class FileSystemMainImpl implements FileSystemMain, Disposable {
     }
 
     $delete(uri: UriComponents, opts: FileDeleteOptions): Promise<void> {
-        return this._fileService.del(new CoreURI(URI.revive(uri)), opts).catch(FileSystemMainImpl._handleError);
+        return this._fileService.delete(new CoreURI(URI.revive(uri)), opts).catch(FileSystemMainImpl._handleError);
     }
 
     private static _handleError(err: any): never {

@@ -24,6 +24,9 @@ const jschardet = require('jschardet');
 const MINIMUM_THRESHOLD = 0.2;
 jschardet.Constants.MINIMUM_THRESHOLD = MINIMUM_THRESHOLD;
 
+/**
+ * @deprecated since 1.4.0 - in order to suppot VS Code FS API (https://github.com/eclipse-theia/theia/pull/7908), use `EncodingService` instead
+ */
 export namespace EncodingUtil {
     const IGNORE_ENCODINGS = ['ascii', 'utf-8', 'utf-16', 'utf-32'];
     export async function guessEncodingByBuffer(buffer: Buffer): Promise<string | undefined> {

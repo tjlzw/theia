@@ -17,18 +17,35 @@
 import { injectable, inject, postConstruct } from 'inversify';
 import URI from '@theia/core/lib/common/uri';
 import { CompositeTreeNode, TreeModelImpl, TreeNode, ConfirmDialog } from '@theia/core/lib/browser';
-import { FileSystem } from '../../common';
 import { FileSystemWatcher, FileChangeType, FileChange, FileMoveEvent } from '../filesystem-watcher';
 import { FileStatNode, DirNode, FileNode } from './file-tree';
 import { LocationService } from '../location';
 import { LabelProvider } from '@theia/core/lib/browser/label-provider';
+import { FileService } from '../file-service';
+import { WorkingCopyFileService } from '../working-copy-file-service';
+import { FileOperationError, FileOperationResult } from '../../common/files';
+import { MessageService } from '@theia/core/lib/common/message-service';
+import { EnvVariablesServer } from '@theia/core/lib/common/env-variables';
 
 @injectable()
 export class FileTreeModel extends TreeModelImpl implements LocationService {
 
     @inject(LabelProvider) protected readonly labelProvider: LabelProvider;
-    @inject(FileSystem) protected readonly fileSystem: FileSystem;
-    @inject(FileSystemWatcher) protected readonly watcher: FileSystemWatcher;
+
+    @inject(FileService)
+    protected readonly fileService: FileService;
+
+    @inject(WorkingCopyFileService)
+    protected readonly workingCopyFileService: WorkingCopyFileService;
+
+    @inject(FileSystemWatcher)
+    protected readonly watcher: FileSystemWatcher;
+
+    @inject(MessageService)
+    protected readonly messageService: MessageService;
+
+    @inject(EnvVariablesServer)
+    protected readonly environments: EnvVariablesServer;
 
     @postConstruct()
     protected init(): void {
@@ -47,7 +64,7 @@ export class FileTreeModel extends TreeModelImpl implements LocationService {
 
     set location(uri: URI | undefined) {
         if (uri) {
-            this.fileSystem.getFileStat(uri.toString()).then(async fileStat => {
+            this.fileService.resolve(uri, { resolveSingleChildDescendants: true, resolveMetadata: false }).then(fileStat => {
                 if (fileStat) {
                     const node = DirNode.createRoot(fileStat);
                     this.navigateTo(node);
@@ -60,7 +77,7 @@ export class FileTreeModel extends TreeModelImpl implements LocationService {
 
     async drives(): Promise<URI[]> {
         try {
-            const drives = await this.fileSystem.getDrives();
+            const drives = await this.environments.getDrives();
             return drives.map(uri => new URI(uri));
         } catch (e) {
             this.logger.error('Error when loading drives.', e);
@@ -137,22 +154,12 @@ export class FileTreeModel extends TreeModelImpl implements LocationService {
     }
 
     copy(uri: URI): boolean {
-        if (uri.scheme !== 'file') {
-            return false;
-        }
         const node = this.selectedFileStatNodes[0];
         if (!node) {
             return false;
         }
         const targetUri = node.uri.resolve(uri.path.base);
-        /* Check if the folder is copied on itself */
-        const sourcePath = uri.path.toString();
-        const targetPath = node.uri.path.toString();
-        if (sourcePath === targetPath) {
-            return false;
-        }
-
-        this.fileSystem.copy(uri.toString(), targetUri.toString());
+        this.workingCopyFileService.copy(uri, targetUri);
         return true;
     }
 
@@ -161,16 +168,20 @@ export class FileTreeModel extends TreeModelImpl implements LocationService {
      */
     async move(source: TreeNode, target: TreeNode): Promise<void> {
         if (DirNode.is(target) && FileStatNode.is(source)) {
-            const sourceUri = source.uri.toString();
-            if (target.uri.toString() === sourceUri) { /*  Folder on itself */
-                return;
-            }
-            const name = source.uri.displayName;
-            const targetUri = target.uri.resolve(name).toString();
-            if (sourceUri !== targetUri) { /*  File not on itself */
-                const fileExistsInTarget = await this.fileSystem.exists(targetUri);
-                if (!fileExistsInTarget || await this.shouldReplace(name)) {
-                    await this.fileSystem.move(sourceUri, targetUri, { overwrite: true });
+            try {
+                await this.workingCopyFileService.move(source.uri, target.uri);
+            } catch (e) {
+                if (e instanceof FileOperationError && e.fileOperationResult === FileOperationResult.FILE_MOVE_CONFLICT) {
+                    const fileName = this.labelProvider.getName(source);
+                    if (await this.shouldReplace(fileName)) {
+                        try {
+                            await this.workingCopyFileService.move(source.uri, target.uri, true /* overwrite */);
+                        } catch (e2) {
+                            this.messageService.error(e2.message);
+                        }
+                    }
+                } else {
+                    this.messageService.error(e.message);
                 }
             }
         }

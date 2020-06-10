@@ -23,7 +23,6 @@
 import debounce = require('lodash.debounce');
 import * as jsoncparser from 'jsonc-parser';
 import { injectable, inject, postConstruct } from 'inversify';
-import { FileSystem, FileStat } from '@theia/filesystem/lib/common';
 import { IconThemeService, IconTheme, IconThemeDefinition } from '@theia/core/lib/browser/icon-theme-service';
 import { IconThemeContribution, DeployedPlugin, UiTheme, getPluginId } from '../../common/plugin-protocol';
 import URI from '@theia/core/lib/common/uri';
@@ -35,6 +34,8 @@ import { ThemeType } from '@theia/core/lib/browser/theming';
 import { FileStatNode, DirNode, FileSystemWatcher, FileChangeEvent } from '@theia/filesystem/lib/browser';
 import { WorkspaceRootNode } from '@theia/navigator/lib/browser/navigator-tree';
 import { Endpoint } from '@theia/core/lib/browser/endpoint';
+import { WorkingCopyFileService } from '@theia/filesystem/lib/browser/working-copy-file-service';
+import { FileStat } from '@theia/filesystem/lib/common/files';
 
 export interface PluginIconDefinition {
     iconPath: string;
@@ -97,8 +98,8 @@ export class PluginIconThemeDefinition implements IconThemeDefinition, IconTheme
 @injectable()
 export class PluginIconTheme extends PluginIconThemeDefinition implements IconTheme, Disposable {
 
-    @inject(FileSystem)
-    protected readonly fileSystem: FileSystem;
+    @inject(WorkingCopyFileService)
+    protected readonly fileService: WorkingCopyFileService;
 
     @inject(FileSystemWatcher)
     protected readonly fsWatcher: FileSystemWatcher;
@@ -192,11 +193,12 @@ export class PluginIconTheme extends PluginIconThemeDefinition implements IconTh
             this.icons.clear();
         }));
 
-        const { content } = await this.fileSystem.resolveContent(this.uri);
+        const uri = new URI(this.uri);
+        const result = await this.fileService.read(uri);
+        const content = result.value;
         const json: RecursivePartial<PluginIconThemeDocument> = jsoncparser.parse(content, undefined, { disallowComments: false });
         this.hidesExplorerArrows = !!json.hidesExplorerArrows;
 
-        const uri = new URI(this.uri);
         const toUnwatch = await this.fsWatcher.watchFileChanges(uri);
         if (this.toUnload.disposed) {
             toUnwatch.dispose();
@@ -489,13 +491,13 @@ export class PluginIconTheme extends PluginIconThemeDefinition implements IconTh
             return this.getFolderClassNames(element);
         }
         if (FileStatNode.is(element)) {
-            return this.getFileClassNames(element, element.fileStat.uri);
+            return this.getFileClassNames(element, element.fileStat.resource.toString());
         }
         if (FileStat.is(element)) {
             if (element.isDirectory) {
                 return this.getFolderClassNames(element);
             }
-            return this.getFileClassNames(element, element.uri);
+            return this.getFileClassNames(element, element.resource.toString());
         }
         if (URIIconReference.is(element)) {
             if (element.id === 'folder') {

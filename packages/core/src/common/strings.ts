@@ -256,6 +256,8 @@ export function getNextCodePoint(str: string, len: number, offset: number): numb
 /**
  * A manual encoding of `str` to UTF8.
  * Use only in environments which do not offer native conversion methods!
+ *
+ * TODO replace with iconv.encode
  */
 export function encodeUTF8(str: string): Uint8Array {
     const strLen = str.length;
@@ -311,6 +313,8 @@ export function encodeUTF8(str: string): Uint8Array {
 /**
  * A manual decoding of a UTF8 string.
  * Use only in environments which do not offer native conversion methods!
+ *
+ * TODO replace with iconv.decode
  */
 export function decodeUTF8(buffer: Uint8Array): string {
     // https://en.wikipedia.org/wiki/UTF-8

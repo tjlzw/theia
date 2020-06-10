@@ -21,6 +21,8 @@
 import * as streams from './stream';
 import * as strings from '@theia/core/lib/common/strings';
 
+// TODO simplify with iconv
+
 const hasBuffer = (typeof Buffer !== 'undefined');
 const hasTextEncoder = (typeof TextEncoder !== 'undefined');
 const hasTextDecoder = (typeof TextDecoder !== 'undefined');
